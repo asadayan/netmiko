@@ -2,6 +2,17 @@
 from netmiko import ConnectHandler
 import re
 import inc
+
+def ERR(data,prompt,ip):
+        error = re.findall('% Invalid|\^',data)
+        if error:
+                filename = '{}-config.log'.format(prompt[:-1])
+                fn = open(filename,'w')
+                fn.write(data)
+                fn.close()
+                return 1
+
+
 def CFG(ip,username='admin',password='Cisco12345',vrf_no=2,no=0,glob_del = 0):
         device = {
                 'device_type':'cisco_nxos',
@@ -34,8 +45,8 @@ def CFG(ip,username='admin',password='Cisco12345',vrf_no=2,no=0,glob_del = 0):
                 reboot = 0
         
         #####
-        global_feature = ['feature lldp', 'feature ospf', 'feature pim', 'feature bgp', 'feature lacp', 'feature bfd', 'feature pbr','feature interface-vlan']
-
+        global_feature = ['feature lldp', 'feature ospf', 'feature pim', 'feature bgp', 'feature lacp', 'feature bfd', 'feature pbr','feature interface-vlan',' no feature tunnel']
+        vxlan_cli = ['feature vpc', 'feature vn-segment-vlan-based', 'feature nv overlay','nv overlay evpn','fabric forwarding anycast-gateway-mac 0000.face.feed']
         # Vxlan Config
         spine1_lo0 = '3.101.1.1'
      
@@ -45,8 +56,15 @@ def CFG(ip,username='admin',password='Cisco12345',vrf_no=2,no=0,glob_del = 0):
 
         bgp_as = '65001'
         remote_as = '65001'
-        loop0_ip = '1.0.{}.1'.format(host_no)
-        loop1_ip = '2.0.{}.2'.format(host_no)
+        if int(host_no) < 255:
+                loop0_ip = '1.0.{}.1'.format(host_no)
+                loop1_ip = '2.0.{}.2'.format(host_no)
+        elif int(host_no) > 254:
+                h = int(host_no)
+                hmod = str(h%255)
+                loop0_ip = '1.255.{}.1'.format(hmod)
+                loop1_ip = '2.255.{}.2'.format(hmod)
+   
 
         print '{} loopback0 ip: {}, loopback1 ip: {}'.format(prompt[:-1],loop0_ip,loop1_ip)
         ###########
@@ -60,7 +78,7 @@ def CFG(ip,username='admin',password='Cisco12345',vrf_no=2,no=0,glob_del = 0):
         vrf_set_2 = 200
         vnid = 100000
         vlanset1 = 101
-        vlanset2 = 200
+        vlanset2 = 1101
         
         
         mcast_grp1 = '239.1.1.1'
@@ -77,7 +95,7 @@ def CFG(ip,username='admin',password='Cisco12345',vrf_no=2,no=0,glob_del = 0):
         vrf_cfg = []
 
         #######
-        nve_cli_g =  ['{} system nve peer-vni-counter'.format(GLOB),'{} int nve 1'.format(GLOB), 'no shut', 'host-reachability protocol bgp','source-interface loopback1',
+        nve_cli_g =  ['{} int nve 1'.format(GLOB), 'no shut', 'host-reachability protocol bgp','source-interface loopback1',
                     'source-interface hold-down-time 400']
         for vrf in range(1,vrf_no+1):
                 
@@ -148,83 +166,110 @@ def CFG(ip,username='admin',password='Cisco12345',vrf_no=2,no=0,glob_del = 0):
         ##### Applying Config
 
         for command in global_feature:
-                command = command.rstrip()
+                command = command.strip()
                 output = net_connect.send_config_set(command,delay_factor=2)
                 print '===> {}:\n {}'.format(prompt,output)
-
+                ERR(output,prompt,ip)
+  
+        
+        for command in vxlan_cli:
+                command = command.strip()
+                output = net_connect.send_config_set(command,delay_factor=2)
+                print '===> {}:\n {}'.format(prompt,output)
+                ERR(output,prompt,ip)
+                
         output = net_connect.send_config_set(hw_cli,delay_factor=2)
         print '===> {}:\n {}'.format(prompt,output)
+        ERR(output,prompt,ip)
         
         output = net_connect.send_config_set(loopback0,delay_factor=2)
         print '===> {}:\n {}'.format(prompt,output)
+        ERR(output,prompt,ip)
 
         
         output = net_connect.send_config_set(loopback1,delay_factor=2)
         print '===> {}:\n {}'.format(prompt,output)
+        ERR(output,prompt,ip)
 
         
         output = net_connect.send_config_set(ospf,delay_factor=2)
         print '===> {}:\n {}'.format(prompt,output)
+        ERR(output,prompt,ip)
                 
         
         output = net_connect.send_config_set(rp,delay_factor=2)
         print '===> {}:\n {}'.format(prompt,output)
+        ERR(output,prompt,ip)
 
 
         
         output = net_connect.send_config_set(vlan_cfg1,delay_factor=2)
         print '===> {}:\n {}'.format(prompt,output)
+        ERR(output,prompt,ip)
 
         
         output = net_connect.send_config_set(vlan_cfg2,delay_factor=2)
         print '===> {}:\n {}'.format(prompt,output)
+        ERR(output,prompt,ip)
 
 
         for command in vxlan_map1:
                 output = net_connect.send_config_set(command,delay_factor=2)
                 print '===> {}:\n {}'.format(prompt,output)
+                ERR(output,prompt,ip)
 
         for command in vxlan_map2:
                 output = net_connect.send_config_set(command,delay_factor=2)
                 print '===> {}:\n {}'.format(prompt,output)
+                ERR(output,prompt,ip)
 
         
         output = net_connect.send_config_set(vrf_cfg,delay_factor=2)
         print '===> {}:\n {}'.format(prompt,output)
+        ERR(output,prompt,ip)
 
         
         output = net_connect.send_config_set(bgp,delay_factor=2)
         print '===> {}:\n {}'.format(prompt,output)
+        ERR(output,prompt,ip)
 
         for command in evpn1:
                 output = net_connect.send_config_set(command,delay_factor=2)
                 print '===> {}:\n {}'.format(prompt,output)
+                ERR(output,prompt,ip)
 
         for command in evpn2:
                 output = net_connect.send_config_set(command,delay_factor=2)
                 print '===> {}:\n {}'.format(prompt,output)
+                ERR(output,prompt,ip)
 
         
         output = net_connect.send_config_set(nve_cli_g,delay_factor=2)
         print '===> {}:\n {}'.format(prompt,output)
+        ERR(output,prompt,ip)
 
         for command in nve_cli:
                 output = net_connect.send_config_set(command,delay_factor=2)
                 print '===> {}:\n {}'.format(prompt,output)
+                ERR(output,prompt,ip)
 
 
         for command in vlan_int_config:
                 output = net_connect.send_config_set(command,delay_factor=2)
                 print '===> {}:\n {}'.format(prompt,output)
+                ERR(output,prompt,ip)
         output = net_connect.send_config_set('copy runn start')
         print output
+        ERR(output,prompt,ip)
         print 'Finshed config for device : {}'.format(prompt)
 
         if reboot == 1:
                 output = net_connect.send_command('reload')
                 print output
+                ERR(output,prompt,ip)
                 output = net_connect.send_command('yes')
                 print output
+                ERR(output,prompt,ip)
                 
 
         net_connect.disconnect()

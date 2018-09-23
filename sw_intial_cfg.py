@@ -6,13 +6,14 @@ import inc
 import re
 
 
+
 def cli_complete_check(tn,cli,resp=0):
   time.sleep(2)
   tn.write(cli)
   if resp != 0:
     data = 0
   data  = tn.read_very_eager()
-  info_login = re.findall('login:',data)
+  info_login = re.findall('login:|#',data)
   info_poap = re.findall('Abort Auto Provisioning.*',data)
   if info_login:
     print 'Need to configure Host_name, IP and static route'
@@ -23,6 +24,57 @@ def cli_complete_check(tn,cli,resp=0):
     print info_poap
     return info_poap
   
+def config_ip_only(tn,ipaddress,host_name):
+  config = 'config t\n'
+  mgmt = 'int mgmt0\n'
+  ip = "ip address {}/24\n".format(ipaddress)
+  mgmt_ip = ip
+  vrf = "vrf context management\n"
+  route = "ip route 0/0 172.22.132.1\n"
+  host = 'hostname {}\n'.format(host_name)
+  save = 'copy runn start\n'
+  tn.write('\n')
+  time.sleep(3)
+  tn.write('\n')
+  data = tn.read_until('#')
+  print data
+  if data:
+      tn.write(config)
+      time.sleep(3)
+      data = tn.read_very_eager()
+      print data
+      tn.write(mgmt)
+      time.sleep(3)
+      data = tn.read_very_eager()
+      print data
+      tn.write(mgmt_ip)
+      time.sleep(3)
+      data = tn.read_very_eager()
+      print data
+      tn.write(vrf)
+      time.sleep(3)
+      data = tn.read_very_eager()
+      print data
+      tn.write(route)
+      time.sleep(3)
+      data = tn.read_very_eager()
+      print data
+      tn.write(host)
+      time.sleep(3)
+      data = tn.read_very_eager()
+      print data
+      tn.write(save)
+      time.sleep(10)
+      data = tn.read_very_eager()
+      print data
+      fn = open('rack7.cfg','a+')
+      data = '{},{}\n'.format(host_name[:-1],ipaddress)
+      fn.write(data)
+      tn.close()
+      fn.close()
+      return 1
+
+
 
 def config_ip(tn,ipaddress,host_name):
   config = 'config t\n'
@@ -30,7 +82,7 @@ def config_ip(tn,ipaddress,host_name):
   ip = "ip address {}/24\n".format(ipaddress)
   mgmt_ip = ip
   vrf = "vrf context management\n"
-  route = "ip route 0/0 172.29.165.1\n"
+  route = "ip route 0/0 172.22.132.1\n"
   host = 'hostname {}\n'.format(host_name)
   save = 'copy runn start\n'
   tn.write('\n')
@@ -78,7 +130,7 @@ def config_ip(tn,ipaddress,host_name):
       time.sleep(10)
       data = tn.read_very_eager()
       print data
-      fn = open('rack6.cfg','a+')
+      fn = open('rack7.cfg','a+')
       data = '{},{}\n'.format(host_name[:-1],ipaddress)
       fn.write(data)
       tn.close()
@@ -104,8 +156,14 @@ def POAP(termservip,port,ipaddress,host_no):
   tn.open(termservip,port,10)
   check = cli_complete_check(tn,'\n')
   check = cli_complete_check(tn,'\n')
+
   if check and check[0] == 'login:':
     config_i = config_ip(tn,ipaddress,host_name)
+  
+  elif check[0] == '#':
+    config_i = config_ip_only(tn,ipaddress,host_name)
+
+
   elif check and check[0] != 'login:':
     tn.write('\n')
     data = tn.read_until('[n]:',5)
@@ -145,13 +203,19 @@ def POAP(termservip,port,ipaddress,host_no):
     print 'Error doing telnet'
 
 
-ip = '172.29.165.249'
-host_no = 231
-term_serv = '172.29.165.14'
-port = 2076
+ip = '172.22.132.121'
+host_no = 275
+term_serv = '172.29.165.13'
+port = 2089
 
-for items in range(2076,2098):
+for items in range(2033,2064):
   port = items
-  data = POAP(term_serv, port, ip, host_no)
+  try:
+    data = POAP(term_serv, port, ip, host_no)
+  except:
+    fa = open('error.cfg','a')
+    print '#Error in configuring termserver :{} port: {} for host:goog-l{} ipaddress{}\n'.format(term_serv,port,host_no,ip)
+    fa.write('#Error in configuring termserver :{} port: {} for host:goog-l{} ipaddress{}\n'.format(term_serv,port,host_no,ip))
+    fa.close()
   ip = inc.IP_SUBNET(ip,net_incr=0,host_incr=1)
   host_no +=1
